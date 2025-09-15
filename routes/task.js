@@ -1,57 +1,68 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-
+const Task = require('../models/Task');
 
 const router = express.Router();
 
-
-// POST /auth/register
-router.post('/register', async (req, res) => {
-try {
-const { name, email, password } = req.body;
-if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
-
-
-const existing = await User.findOne({ email });
-if (existing) return res.status(409).json({ error: 'Email already registered' });
-
-
-const passwordHash = await bcrypt.hash(password, 10);
-await User.create({ name, email, passwordHash });
-return res.status(201).send();
-} catch (err) {
-console.error('Register error:', err);
-return res.status(500).json({ error: 'Server error' });
-}
+// GET /tasks?category=work
+router.get('/', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { category } = req.query;
+    const filter = { userId };
+    if (category) filter.category = category;
+    const tasks = await Task.find(filter).sort({ createdAt: -1 });
+    return res.json(tasks);
+  } catch (err) {
+    console.error('List tasks error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
-
-// POST /auth/login
-router.post('/login', async (req, res) => {
-try {
-const { email, password } = req.body;
-if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
-
-
-const user = await User.findOne({ email });
-if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-
-const ok = await bcrypt.compare(password, user.passwordHash);
-if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
-
-
-const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-});
-return res.json({ token });
-} catch (err) {
-console.error('Login error:', err);
-return res.status(500).json({ error: 'Server error' });
-}
+// POST /tasks
+router.post('/', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { title, description, category } = req.body;
+    if (!title || !category) return res.status(400).json({ error: 'Missing fields' });
+    const task = await Task.create({ userId, title, description, category });
+    return res.status(201).json(task);
+  } catch (err) {
+    console.error('Create task error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
+// PATCH /tasks/:id
+router.patch('/:id', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const update = {};
+    const allowed = ['title', 'description', 'category', 'isDone'];
+    for (const key of allowed) {
+      if (key in req.body) update[key] = req.body[key];
+    }
+    const task = await Task.findOneAndUpdate({ _id: id, userId }, update, { new: true });
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    return res.json(task);
+  } catch (err) {
+    console.error('Update task error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /tasks/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const result = await Task.findOneAndDelete({ _id: id, userId });
+    if (!result) return res.status(404).json({ error: 'Task not found' });
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Delete task error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
 
 module.exports = router;

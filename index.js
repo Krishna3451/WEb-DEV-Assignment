@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
 const cors = require('cors')
 
 const auth = require('./middleware/verifyToken')
+const authRouter = require('./routes/auth')
+const taskRouter = require('./routes/task')
 
 const app = express();
 
@@ -19,10 +21,9 @@ app.get('/', (req, res) => {
   res.send('Hello from the Node backend!');
 });
 
-// Auth
-app.use(auth)
+// Routes
 app.use('/auth', authRouter)
-app.use('/task', taskRouter)
+app.use('/tasks', auth, taskRouter)
 
 
 
